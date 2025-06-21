@@ -1,0 +1,166 @@
+
+x-common-env: &common-env
+  TZ: America/Chicago
+  PUID: 1000
+  PGID: 1000
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: invoiceninja_nginx
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    ports:
+      - "9000:80"
+    volumes:
+      - ninja_data:/var/www/app/public
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - internal_network
+    depends_on:
+      - invoiceninja
+    environment:
+      - TZ=America/Chicago
+
+  mysql:
+    image: mysql:8.0
+    container_name: invoiceninja_mysql
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    environment:
+      - TZ=America/Chicago
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=invoiceninja
+      - MYSQL_USER=invoiceninja
+      - MYSQL_PASSWORD=invoiceninja123
+      - MYSQL_INITDB_SKIP_TZINFO=1
+      - MYSQL_DATADIR=/var/lib/mysql/data
+      - MYSQL_INITDB_WANTEDTMPDIR=/tmp
+    command: [
+      '--innodb-buffer-pool-size=512M',
+      '--innodb-log-file-size=128M',
+      '--innodb-log-buffer-size=32M',
+      '--max-connections=100',
+      '--max-allowed-packet=64M',
+      '--default-authentication-plugin=mysql_native_password',
+      '--character-set-server=utf8mb4',
+      '--collation-server=utf8mb4_unicode_ci'
+    ]
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    networks:
+      - internal_network
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$${MYSQL_USER}", "-p$${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  invoiceninja:
+    image: invoiceninja/invoiceninja:latest
+    container_name: invoiceninja
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    environment:
+    #base64:feaoxTH+JPT6jQ3YYX14JLiBUxe3jFpAm701XW2CZCE=
+      - TZ=America/Chicago
+      - APP_URL=http://localhost:9000
+      - APP_KEY=base64:feaoxTH+JPT6jQ3YYX14JLiBUxe3jFpAm701XW2CZCE=
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=invoiceninja
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REQUIRE_HTTPS=false
+      - APP_DEBUG=true
+      - APP_ENV=DEBUG
+      - LOG_LEVEL=error
+      - SESSION_DRIVER=file
+      - CACHE_DRIVER=file
+      - QUEUE_CONNECTION=sync
+      - MAIL_MAILER=log
+      - TRUSTED_PROXIES=*\n
+    volumes:
+      - ninja_data:/var/www/app/public
+      - ninja_db:/var/www/app/storage
+      - ./storage/logs:/var/www/app/storage/logs
+    networks:
+      - internal_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # Invoice Ninja AI functionality is now handled by OpenWebUI
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+    ports:
+      - "3000:8080"
+    environment:
+      - TZ=America/Chicago
+      - OPENAI_API_BASE_URL=http://model-runner.docker.internal/engines/llama.cpp/v1
+      - OPENAI_API_KEY=na
+      - WEBUI_NAME=InvoiceNinja AI Assistant
+      - WEBUI_URL=http://localhost:3000
+      - DEFAULT_MODEL=ai/llama3.2:latest
+      - DEFAULT_WORKERS=2
+      - MAX_WORKERS=4
+      - MAX_INPUT_TOKENS=4096
+    volumes:
+      - open-webui:/app/backend/data
+      - ./invoice_ninja_openapi.json:/app/backend/openapi.json
+      - ./openwebui_config.json:/app/backend/config.json
+    networks:
+      - internal_network
+    depends_on:
+      - llm-runner
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  llm-runner:
+    provider:
+      type: model
+      options:
+        model: ai/llama3.2:latest
+
+
+networks:
+  internal_network:
+    driver: bridge
+    
+volumes:
+  ninja_data:
+  ninja_db:
+  mysql_data:
+  open-webui:
+  openwebui_data:
+  ollama_data:
+#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 hf token
+#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
+#dmPsgzOBnk8o8ompVEQds7lgQnGbnzcSPPAEO4zdxdmXxtvCu2c3Im2MinyRzjEr invoiceninja

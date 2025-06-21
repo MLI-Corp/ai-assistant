@@ -1,0 +1,74 @@
+{
+  "name": "InvoiceNinja AI Assistant",
+  "description": "AI Assistant integrated with InvoiceNinja and Email",
+  "version": "1.0.0",
+  "api_endpoint": "http://localhost:9000/api/v1/openwebui",
+  "functions": [
+    {
+      "name": "search_emails",
+      "description": "Search for emails based on a query",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query for emails"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results to return",
+            "default": 10
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_email",
+      "description": "Get details of a specific email by ID",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "description": "ID of the email to retrieve"
+          }
+        },
+        "required": ["email_id"]
+      }
+    },
+    {
+      "name": "get_invoices",
+      "description": "Get a list of invoices from InvoiceNinja",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Filter invoices by status (e.g., 'draft', 'sent', 'paid')",
+            "enum": ["draft", "sent", "paid", "partial", "overdue", "unpaid"]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of invoices to return",
+            "default": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "get_invoice",
+      "description": "Get details of a specific invoice by ID",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "invoice_id": {
+            "type": "string",
+            "description": "ID of the invoice to retrieve"
+          }
+        },
+        "required": ["invoice_id"]
+      }
+    }
+  ]
+}
