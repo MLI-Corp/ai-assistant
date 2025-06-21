@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     EMAIL_FOLDER: str = os.getenv("EMAIL_FOLDER", "INBOX")
     
     # InvoiceNinja Configuration
-    INVOICE_NINJA_URL: str = os.getenv("INVOICE_NINJA_URL", "http://invoiceninja:80")
-    INVOICE_NINJA_TOKEN: str = os.getenv("INVOICE_NINJA_TOKEN", "")
+    INVOICE_NINJA_URL: str = os.getenv("INVOICE_NINJA_URL", "http://localhost:9000")
+    INVOICE_NINJA_TOKEN: str = os.getenv("INVOICE_NINJA_TOKEN", "TtJU3xsyin9K4Ne1N8swAIqCZMHXjY32Ol9nrNL6NLbbr8EIPpv4fugZqHRjRrPb")
     
     # LLM Configuration
     LLM_API_BASE_URL: str = os.getenv("LLM_API_BASE_URL", "http://localhost:12434/v1API")

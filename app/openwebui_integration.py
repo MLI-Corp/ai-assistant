@@ -106,6 +106,88 @@ async def get_invoice(
             detail="Failed to fetch invoice"
         )
 
+@router.post("/invoices/create")
+async def create_invoice(
+    description: str,
+    amount: float,
+    client_name: str = None,
+    client_email: str = None,
+    due_date: str = None,
+    ninja_client: InvoiceNinjaClient = Depends(get_invoice_ninja_client)
+):
+    """
+    Create a new invoice from natural language description
+    """
+    try:
+        invoice = await ninja_client.create_invoice_from_text(
+            description=description,
+            amount=amount,
+            client_name=client_name,
+            client_email=client_email,
+            due_date=due_date
+        )
+        return {"success": True, "invoice": invoice}
+    except Exception as e:
+        logger.error(f"Error creating invoice: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create invoice: {str(e)}"
+        )
+
+@router.post("/invoices/{invoice_id}/mark-sent")
+async def mark_invoice_sent(
+    invoice_id: str,
+    ninja_client: InvoiceNinjaClient = Depends(get_invoice_ninja_client)
+):
+    """
+    Mark an invoice as sent
+    """
+    try:
+        result = await ninja_client.mark_invoice_as_sent(invoice_id)
+        return {"success": True, "result": result}
+    except Exception as e:
+        logger.error(f"Error marking invoice as sent: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark invoice as sent: {str(e)}"
+        )
+
+@router.post("/invoices/{invoice_id}/mark-paid")
+async def mark_invoice_paid(
+    invoice_id: str,
+    ninja_client: InvoiceNinjaClient = Depends(get_invoice_ninja_client)
+):
+    """
+    Mark an invoice as paid
+    """
+    try:
+        result = await ninja_client.mark_invoice_as_paid(invoice_id)
+        return {"success": True, "result": result}
+    except Exception as e:
+        logger.error(f"Error marking invoice as paid: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark invoice as paid: {str(e)}"
+        )
+
+@router.get("/clients")
+async def get_clients(
+    query: str = None,
+    ninja_client: InvoiceNinjaClient = Depends(get_invoice_ninja_client)
+):
+    """
+    Get a list of clients from InvoiceNinja
+    """
+    try:
+        clients = await ninja_client.get_clients(query=query)
+        return {"clients": clients}
+    except Exception as e:
+        logger.error(f"Error fetching clients: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch clients"
+        )
+
 # Function to get OpenAPI schema for the LLM
 def get_openai_functions():
     """
@@ -176,6 +258,77 @@ def get_openai_functions():
                     }
                 },
                 "required": ["invoice_id"]
+            }
+        },
+        {
+            "name": "create_invoice",
+            "description": "Create a new invoice with description, amount, and optional client details",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "Description of the service or product being invoiced"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Amount to charge (in dollars)"
+                    },
+                    "client_name": {
+                        "type": "string",
+                        "description": "Name of the client (will create new client if doesn't exist)"
+                    },
+                    "client_email": {
+                        "type": "string",
+                        "description": "Email of the client"
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "description": "Due date for the invoice (YYYY-MM-DD format)"
+                    }
+                },
+                "required": ["description", "amount"]
+            }
+        },
+        {
+            "name": "mark_invoice_sent",
+            "description": "Mark an invoice as sent to the client",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "string",
+                        "description": "ID of the invoice to mark as sent"
+                    }
+                },
+                "required": ["invoice_id"]
+            }
+        },
+        {
+            "name": "mark_invoice_paid",
+            "description": "Mark an invoice as paid",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "invoice_id": {
+                        "type": "string",
+                        "description": "ID of the invoice to mark as paid"
+                    }
+                },
+                "required": ["invoice_id"]
+            }
+        },
+        {
+            "name": "get_clients",
+            "description": "Get a list of clients from InvoiceNinja",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Optional search query to filter clients"
+                    }
+                }
             }
         }
     ]
