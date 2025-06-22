@@ -22,6 +22,7 @@ wheels/
 MANIFEST
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
@@ -59,3 +60,13 @@ Thumbs.db
 # Backup files
 *.bak
 backup_*/ 
+
+#Model files
+models/
+huggingface_cache/
+model_cache/
+*.bin
+*.safetensors
+*.pkl
+*.h5
+*.onnx
