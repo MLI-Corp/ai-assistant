@@ -1,121 +1,171 @@
-# AI-Powered Invoice Processing System
+# OpenWebUI Integrated Invoicing Assistant
 
-This system combines Invoice Ninja with AI to automatically process emails, extract invoice information using GPT-2 Large, and create invoices automatically.
+This project provides a backend assistant that integrates with OpenWebUI to monitor an email inbox for work authorizations, extracts relevant data, and then creates entries in InvoiceNinja (v5) and Google Calendar. It features a modular design and is intended to be run via Docker Compose.
+
+## Core System Components
+
+*   **Backend Assistant (`backend_assistant/`)**:
+    *   Monitors a specified IMAP email inbox (e.g., Zoho, Gmail) for new messages.
+    *   Parses emails to identify and extract work authorization details (Authorization ID, client info, service date/time, mileage).
+    *   Integrates with a local **InvoiceNinja v5** instance (running on SQLite for lighter resource use) to create clients and invoices.
+    *   Integrates with **Google Calendar** to create events for future services.
+    *   Sends processing summaries and error notifications to a configurable **Webhook URL** (e.g., for Matrix/Beeper integration).
+    *   Uses a local SQLite database for operational logs, geocoding cache, and client billing rates.
+    *   Exposes a FastAPI for control, status, logs, and a WebSocket for real-time updates.
+*   **InvoiceNinja (Docker Service)**: A local instance of InvoiceNinja v5, configured to use SQLite. Accessible at `http://localhost:9000`.
+*   **OpenWebUI (Docker Service)**: A local instance of OpenWebUI. The backend assistant is designed to be integrated with it, providing status and control. Accessible at `http://localhost:3000`.
+*   **(Optional) LLM Runner**: The `docker-compose.yml` can be configured to run a local LLM (e.g., Ollama) for OpenWebUI.
 
 ## Features
 
-- **Email Monitoring**: Monitors specified email accounts for invoice requests
-- **AI-Powered Processing**: Uses GPT-2 Large to understand and extract invoice details from emails
-- **Automatic Invoice Generation**: Creates invoices in Invoice Ninja without manual intervention
-- **Email Notifications**: Sends confirmation emails with invoice details
-- **REST API**: Provides endpoints for integration and monitoring
+-   **Automated Email Processing**: Fetches and processes emails from an IMAP inbox.
+-   **Data Extraction**: Identifies key information from authorization emails.
+-   **Invoice Creation**: Automatically creates clients and invoices in InvoiceNinja.
+-   **Calendar Scheduling**: Automatically creates events in Google Calendar for future-dated services.
+-   **Webhook Notifications**: Sends detailed notifications about processing results.
+-   **API & WebSocket**:
+    -   REST API for controlling the assistant (start/stop monitoring), checking status, and retrieving logs.
+    -   WebSocket for streaming real-time status updates to clients like OpenWebUI.
+-   **Dockerized**: All components run in Docker containers for easy setup and deployment.
+-   **Configurable**: Extensive configuration via environment variables.
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Python 3.9+
-- Access to an email account (IMAP)
-- Invoice Ninja API token
+-   Docker and Docker Compose
+-   Python 3.11+ (for local development if not using Docker exclusively)
+-   An email account with IMAP access.
+-   Google Cloud Project with OAuth 2.0 credentials (Client ID, Client Secret) for Google Calendar integration (see `backend_assistant/README.md` for setup).
 
 ## Quick Start
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd invoiceninja_ai
-   ```
+1.  **Clone the Repository**
+    ```bash
+    git clone <repository-url>
+    cd <repository-directory-name>
+    ```
 
-2. **Set up environment variables**
-   ```bash
-   cp .env.template .env
-   ```
-   Edit the `.env` file with your configuration.
+2.  **Set Up Environment Variables**
+    *   **Main Docker Compose variables**: Copy `.env.template` to `.env` and customize if needed (e.g., `INVOICENINJA_APP_DEBUG`, `TZ`).
+        ```bash
+        cp .env.template .env
+        ```
+    *   **Backend Assistant variables**: Navigate to the `backend_assistant` directory, copy the template, and fill in your details.
+        ```bash
+        cd backend_assistant
+        cp .env.assistant.template .env.assistant
+        # Edit .env.assistant with your IMAP, InvoiceNinja, Google, Webhook details
+        cd ..
+        ```
+        **Crucial**: Refer to `backend_assistant/README.md` for detailed instructions on setting up `IMAP_PASSWORD` (use App Passwords for 2FA accounts) and obtaining `GOOGLE_REFRESH_TOKEN`.
 
-3. **Build and start services**
-   ```bash
-   docker-compose up -d --build
-   ```
+3.  **Client Billing Rates Configuration**
+    *   Create or edit `backend_assistant/config/client_billing_rates.json`. A sample structure is in `backend_assistant/README.md`. This file is mounted into the assistant container.
+    *   Example:
+        ```bash
+        mkdir -p backend_assistant/config
+        echo "{ \"default\": { \"mileage_rate\": 0.50 } }" > backend_assistant/config/client_billing_rates.json
+        ```
 
-4. **Access the services**
-   - Invoice Ninja: http://localhost:9000
-   - AI Assistant API: http://localhost:8000/docs
+4.  **Build and Start Services**
+    ```bash
+    docker-compose up -d --build
+    ```
 
-## Configuration
+5.  **Access Services**
+    *   **InvoiceNinja UI**: `http://localhost:9000`
+    *   **OpenWebUI**: `http://localhost:3000`
+    *   **Backend Assistant API Docs**: `http://localhost:8001/docs`
+    *   **Backend Assistant Health**: `http://localhost:8001/health`
+    *   **Backend Assistant WebSocket**: `ws://localhost:8001/ws/status`
 
-### Environment Variables
+## Backend Assistant API Endpoints
 
-Create a `.env` file based on `.env.template` with the following variables:
+The assistant provides the following API endpoints (base URL: `http://localhost:8001`):
 
-```
-# Email Configuration
-EMAIL_USERNAME=your-email@gmail.com
-EMAIL_PASSWORD=your-app-specific-password
+*   `GET /health`: Health check.
+*   `POST /control/start_monitoring`: Starts the email monitoring service.
+*   `POST /control/stop_monitoring`: Stops the email monitoring service.
+*   `GET /control/status`: Gets the current status of the email monitoring service.
+*   `GET /logs?limit=100&offset=0`: Retrieves event logs from the assistant's database.
+*   `WEBSOCKET /ws/status`: WebSocket endpoint for real-time status updates.
 
-# InvoiceNinja Configuration
-INVOICE_NINJA_TOKEN=your-invoice-ninja-token
+## Configuration Details
 
-# Model Configuration
-MODEL_PATH=./gpt-large
-MAX_INPUT_LENGTH=1024
-MAX_GENERATION_LENGTH=500
+*   **Service Orchestration**: Managed by `docker-compose.yml`. This file defines all services, volumes, networks, and their configurations.
+*   **Backend Assistant**: See `backend_assistant/README.md` for comprehensive configuration details, including IMAP, InvoiceNinja, Google Calendar (OAuth setup), Webhook URL, and the client billing rates JSON format.
+*   **InvoiceNinja**: Runs on SQLite. Data is persisted in Docker volumes. `APP_KEY` in `docker-compose.yml` is critical; do not change it after initial setup unless you know what you're doing.
+*   **OpenWebUI**: Configured in `docker-compose.yml` to connect to the backend assistant and potentially a local LLM.
 
-# Application Settings
-POLL_INTERVAL=300  # 5 minutes
-```
+## Development (Backend Assistant)
 
-### Email Setup
+1.  **Navigate to `backend_assistant` directory.**
+    ```bash
+    cd backend_assistant
+    ```
+2.  **Create and activate a virtual environment (recommended):**
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    ```
+3.  **Install dependencies using Poetry:**
+    ```bash
+    pip install poetry # If not already installed
+    poetry install
+    ```
+4.  **Set up `.env.assistant`** as described in Quick Start.
+5.  **Run the application locally (for development):**
+    ```bash
+    poetry run uvicorn app.main:app --reload --port 8001
+    ```
 
-For Gmail, you'll need to:
-1. Enable 2-Step Verification
-2. Generate an App Password
-3. Use the App Password in the `EMAIL_PASSWORD` field
+### Testing (Backend Assistant)
 
-## API Endpoints
+1.  Ensure development dependencies are installed (`poetry install --with dev`).
+2.  Run tests using pytest:
+    ```bash
+    cd backend_assistant
+    poetry run pytest
+    ```
 
-- `GET /` - Welcome message
-- `POST /process-emails` - Manually trigger email processing
-- `GET /health` - Health check endpoint
+## Architecture Overview
 
-## Development
-
-### Running Locally
-
-1. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Run the application:
-   ```bash
-   python -m uvicorn app.main:app --reload
-   ```
-
-### Testing
-
-Run the test script to verify the AI model:
-```bash
-python test_model.py
-```
-
-## Architecture
-
-- **app/email_processor.py**: Handles email retrieval and processing
-- **app/llm_processor.py**: Processes email content using GPT-2 Large
-- **app/invoice_generator.py**: Interfaces with Invoice Ninja API
-- **app/main.py**: FastAPI application with endpoints
+*   **`docker-compose.yml`**: Orchestrates all services: `nginx` (for InvoiceNinja UI), `invoiceninja`, `backend_assistant`, `open-webui`, and optionally an `llm-runner`.
+*   **`backend_assistant/`**: Contains the Python FastAPI application for the assistant.
+    *   **`Dockerfile`**: Defines how the assistant's Docker image is built.
+    *   **`pyproject.toml`**: Manages Python dependencies using Poetry.
+    *   **`app/`**: Source code for the assistant.
+        *   **`main.py`**: FastAPI application, API endpoints, WebSocket.
+        *   **`config.py`**: Pydantic-based settings management.
+        *   **`database.py`**: SQLite database setup and logging functions.
+        *   **`email_handler.py`**: IMAP connection, email fetching, parsing, archiving. Manages workflow.
+        *   **`data_extractor.py`**: Logic for extracting specific information from emails.
+        *   **`invoiceninja_client.py`**: Client for interacting with the InvoiceNinja API.
+        *   **`calendar_handler.py`**: Client for interacting with Google Calendar API.
+        *   **`notification_handler.py`**: Sends notifications to webhook URL.
+        *   **`utils.py`**: Utility functions (e.g., retry decorators).
+    *   **`tests/`**: Unit tests for the assistant.
+    *   **`config/`**: Directory for configuration files like `client_billing_rates.json` (mounted into container).
 
 ## Troubleshooting
 
-- **Email not being processed**: Check the logs with `docker-compose logs ai-assistant`
-- **Model not loading**: Ensure the model files are in the `gpt-large` directory
-- **API connection issues**: Verify the Invoice Ninja URL and token
+*   **General Docker Issues**:
+    *   Ensure Docker and Docker Compose are up to date.
+    *   Check logs for all services: `docker-compose logs -f`
+    *   For specific service: `docker-compose logs backend_assistant` (or `invoiceninja`, `openwebui`).
+*   **Backend Assistant Startup**:
+    *   Verify all required environment variables in `backend_assistant/.env.assistant` are correctly set.
+    *   Check for errors in `backend_assistant/config/client_billing_rates.json` if used.
+*   **Email Processing**:
+    *   See `backend_assistant/README.md` for detailed troubleshooting on IMAP, InvoiceNinja, and Google Calendar.
+    *   Use the `/logs` endpoint of the assistant or check its Docker logs.
+*   **InvoiceNinja**:
+    *   Ensure the `APP_KEY` in `docker-compose.yml` is stable. Changing it can lead to issues.
+    *   Check `docker-compose logs invoiceninja`.
+*   **OpenWebUI**:
+    *   Ensure `OPENAI_API_BASE_URL` in `docker-compose.yml` for the `open-webui` service correctly points to your LLM service.
+    *   Verify `BACKEND_ASSISTANT_URL` points to `http://backend_assistant:8001`.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the `LICENSE` file if one was included (assuming MIT if not specified).
+```

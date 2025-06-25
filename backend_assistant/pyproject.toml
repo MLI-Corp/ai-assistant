@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "backend-assistant"
+version = "0.1.0"
+description = "Lightweight backend assistant for OpenWebUI to monitor tasks and integrate with various services."
+authors = ["AI Assistant <ai@assistant.dev>"]
+readme = "README.md" # Assuming a README will be created in backend_assistant later
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.2"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+pydantic = "^2.5.3"
+pydantic-settings = "^2.1.0"
+python-dotenv = "^1.0.0"
+aiohttp = "^3.9.1"
+pytz = "^2024.1"
+httpx = "^0.25.2"
+
+# Google API Libraries
+google-api-python-client = "^2.122.0"
+google-auth-oauthlib = "^1.2.0"
+google-auth-httplib2 = "^0.2.0"
+
+# Other dependencies to be added if explicitly needed later:
+# beautifulsoup4 = "^4.12.2"  # For parsing HTML content from emails if needed
+# geopy = "^2.4.1" # Alternative for geocoding if Nominatim direct proves difficult
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+ruff = "^0.2.0" # For linting
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

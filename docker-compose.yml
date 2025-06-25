@@ -15,57 +15,17 @@ services:
           cpus: '0.5'
           memory: 256M
     ports:
-      - "9000:80"
+      - "9000:80" # InvoiceNinja UI exposed here
     volumes:
-      - ninja_data:/var/www/app/public
+      - ninja_public_data:/var/www/app/public # For InvoiceNinja public assets
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - internal_network
     depends_on:
-      - invoiceninja
+      invoiceninja:
+        condition: service_started
     environment:
       - TZ=America/Chicago
-
-  mysql:
-    image: mysql:8.0
-    container_name: invoiceninja_mysql
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-    environment:
-      - TZ=America/Chicago
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=invoiceninja
-      - MYSQL_USER=invoiceninja
-      - MYSQL_PASSWORD=invoiceninja123
-      - MYSQL_INITDB_SKIP_TZINFO=1
-      - MYSQL_DATADIR=/var/lib/mysql/data
-      - MYSQL_INITDB_WANTEDTMPDIR=/tmp
-    command: [
-      '--innodb-buffer-pool-size=512M',
-      '--innodb-log-file-size=128M',
-      '--innodb-log-buffer-size=32M',
-      '--max-connections=100',
-      '--max-allowed-packet=64M',
-      '--default-authentication-plugin=mysql_native_password',
-      '--character-set-server=utf8mb4',
-      '--collation-server=utf8mb4_unicode_ci'
-    ]
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/conf.d:/etc/mysql/conf.d:ro
-    networks:
-      - internal_network
-    ports:
-      - "3306:3306"
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$${MYSQL_USER}", "-p$${MYSQL_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   invoiceninja:
     image: invoiceninja/invoiceninja:latest
@@ -75,38 +35,61 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1G
+          memory: 768M
     environment:
-    #base64:feaoxTH+JPT6jQ3YYX14JLiBUxe3jFpAm701XW2CZCE=
       - TZ=America/Chicago
       - APP_URL=http://localhost:9000
       - APP_KEY=base64:feaoxTH+JPT6jQ3YYX14JLiBUxe3jFpAm701XW2CZCE=
-      - DB_CONNECTION=mysql
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_DATABASE=invoiceninja
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_CONNECTION=sqlite
       - REQUIRE_HTTPS=false
-      - APP_DEBUG=true
-      - APP_ENV=DEBUG
+      - APP_DEBUG=${INVOICENINJA_APP_DEBUG:-false}
+      - APP_ENV=${INVOICENINJA_APP_ENV:-production}
       - LOG_LEVEL=error
       - SESSION_DRIVER=file
       - CACHE_DRIVER=file
-      - QUEUE_CONNECTION=sync
+      - QUEUE_CONNECTION=database
       - MAIL_MAILER=log
-      - TRUSTED_PROXIES=*\n
+      - TRUSTED_PROXIES=*
     volumes:
-      - ninja_data:/var/www/app/public
-      - ninja_db:/var/www/app/storage
-      - ./storage/logs:/var/www/app/storage/logs
+      - ninja_public_data:/var/www/app/public
+      - ninja_storage_data:/var/www/app/storage
+    networks:
+      - internal_network
+
+  backend_assistant:
+    build:
+      context: ./backend_assistant
+      dockerfile: Dockerfile
+    container_name: backend_assistant
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend_assistant/.env.assistant
+    volumes:
+      - assistant_data:/app/data
+      - assistant_config:/app/config
+      # If you created specific files like client_billing_rates.json in ./backend_assistant/config
+      # you can mount them directly:
+      - ./backend_assistant/config/client_billing_rates.json:/app/config/client_billing_rates.json:ro
+      # - ./backend_assistant/config/google-service-account.json:/app/config/google-service-account.json:ro # If you add it
     networks:
       - internal_network
     depends_on:
-      mysql:
-        condition: service_healthy
+      invoiceninja:
+        condition: service_started
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 30s
 
-  # Invoice Ninja AI functionality is now handled by OpenWebUI
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: openwebui
@@ -120,22 +103,23 @@ services:
       - "3000:8080"
     environment:
       - TZ=America/Chicago
-      - OPENAI_API_BASE_URL=http://model-runner.docker.internal/engines/llama.cpp/v1
-      - OPENAI_API_KEY=na
+      # Update this to where your LLM (e.g., Ollama, or other OpenAI compatible API) is running
+      # If llm-runner service is defined and on same network: http://llm-runner:<port>/v1
+      # If Ollama running on host and accessible: http://host.docker.internal:11434/v1 (for Docker Desktop)
+      - OPENAI_API_BASE_URL=http://host.docker.internal:11434/v1
+      - OPENAI_API_KEY=ollama # For Ollama, the key can be 'ollama' or any string
       - WEBUI_NAME=InvoiceNinja AI Assistant
       - WEBUI_URL=http://localhost:3000
-      - DEFAULT_MODEL=ai/llama3.2:latest
-      - DEFAULT_WORKERS=2
-      - MAX_WORKERS=4
-      - MAX_INPUT_TOKENS=4096
+      - BACKEND_ASSISTANT_URL=http://backend_assistant:8001 # For OpenWebUI to call assistant
     volumes:
-      - open-webui:/app/backend/data
-      - ./invoice_ninja_openapi.json:/app/backend/openapi.json
-      - ./openwebui_config.json:/app/backend/config.json
+      - openwebui_data:/app/backend/data
+      # You might need to map specific OpenWebUI config files if you customize them
+      # - ./openwebui_config.json:/app/backend/config.json # Example from your original compose
     networks:
       - internal_network
     depends_on:
-      - llm-runner
+      - backend_assistant # OpenWebUI starts after the assistant
+      # - llm-runner # Uncomment if you define and use a local llm-runner service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -143,24 +127,33 @@ services:
       retries: 3
       start_period: 60s
 
-  llm-runner:
-    provider:
-      type: model
-      options:
-        model: ai/llama3.2:latest
-
+  # llm-runner: # Example for a local Ollama service, if not running Ollama elsewhere
+  #   image: ollama/ollama:latest
+  #   container_name: llm_runner
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - internal_network
+  #   # Add any other Ollama specific configurations, like GPU deployment if needed
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
 
 networks:
   internal_network:
     driver: bridge
-    
+
 volumes:
-  ninja_data:
-  ninja_db:
-  mysql_data:
-  open-webui:
+  ninja_public_data:
+  ninja_storage_data:
   openwebui_data:
-  ollama_data:
-#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 hf token
-#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
-#dmPsgzOBnk8o8ompVEQds7lgQnGbnzcSPPAEO4zdxdmXxtvCu2c3Im2MinyRzjEr invoiceninja
+  assistant_data:
+  assistant_config:
+  # ollama_data: # Uncomment if you use the example llm-runner service for Ollama
