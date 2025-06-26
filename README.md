@@ -78,6 +78,52 @@ This project provides a backend assistant that integrates with OpenWebUI to moni
     *   **Backend Assistant Health**: `http://localhost:8001/health`
     *   **Backend Assistant WebSocket**: `ws://localhost:8001/ws/status`
 
+## Setup on Windows Server (No GUI) using PowerShell
+
+For deploying this Dockerized application stack on a Windows Server (No GUI) environment:
+
+1.  **Prerequisites for Windows Server:**
+    *   Windows Server 2019/2022/2025 (or a version that supports Docker Engine).
+    *   PowerShell 5.1 or higher.
+    *   Administrative privileges for installing Docker Engine and managing system features.
+    *   Git for Windows installed and accessible in the PATH.
+    *   Internet connectivity for downloading Docker, Git, and Docker images.
+
+2.  **Download the Setup Script:**
+    *   Download the `setup-windows-server.ps1` script from this repository to your Windows Server.
+
+3.  **Run the Script:**
+    *   Open PowerShell **as Administrator**.
+    *   Navigate to the directory where you saved the script.
+    *   You may need to adjust PowerShell's execution policy to run the script:
+        ```powershell
+        Set-ExecutionPolicy RemoteSigned -Scope Process -Force
+        # Or consult your organization's policy. 'Unrestricted' is less secure.
+        ```
+    *   Run the script:
+        ```powershell
+        .\setup-windows-server.ps1
+        ```
+
+4.  **Follow Script Prompts:**
+    *   The script will check for Docker and Git. If not found, it will display detailed instructions on how to install them manually. **You will need to follow these instructions and potentially restart your server if prompted by the Docker installation.**
+    *   It will ask for the Git repository URL (you can usually accept the default if the script has the correct one) and a local path to clone the project.
+    *   After cloning, it will create initial `.env` files from templates.
+
+5.  **Manual Configuration (Crucial):**
+    *   Once the script prompts you, **manually edit** the following files with your specific settings:
+        *   `.env` (in the project root, for Docker Compose level settings if any).
+        *   `backend_assistant\.env.assistant` (for IMAP, InvoiceNinja API token, Google credentials, Webhook URL, etc.).
+        *   `backend_assistant\config\client_billing_rates.json` (for client-specific billing rates).
+    *   Refer to `backend_assistant/README.md` for detailed guidance on these configurations, especially for obtaining Google OAuth refresh tokens.
+
+6.  **Complete Setup with Script:**
+    *   After configuring the files, confirm in the script to proceed.
+    *   The script will then run `docker-compose pull` and `docker-compose up -d --build` to download images, build the assistant, and start all services.
+
+7.  **Post-Setup:**
+    *   The script will display URLs to access the services and common `docker-compose` commands for management.
+
 ## Backend Assistant API Endpoints
 
 The assistant provides the following API endpoints (base URL: `http://localhost:8001`):
